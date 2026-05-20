@@ -1,0 +1,90 @@
+.tiptap-editor {
+  height: 100%;
+}
+
+.tiptap-editor .ProseMirror {
+  min-height: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  color: #cdd6f4;
+  font-size: 15px;
+  line-height: 1.8;
+  outline: none;
+  font-family: "Noto Sans SC", system-ui, sans-serif;
+}
+
+.tiptap-editor .ProseMirror p {
+  margin-bottom: 1em;
+}
+
+.tiptap-editor .ProseMirror h1,
+.tiptap-editor .ProseMirror h2,
+.tiptap-editor .ProseMirror h3 {
+  color: #cba6f7;
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.4;
+}
+
+.tiptap-editor .ProseMirror h1 { font-size: 1.5em; }
+.tiptap-editor .ProseMirror h2 { font-size: 1.25em; }
+.tiptap-editor .ProseMirror h3 { font-size: 1.1em; }
+
+.tiptap-editor .ProseMirror blockquote {
+  border-left: 3px solid #45475a;
+  padding-left: 1em;
+  color: #a6adc8;
+  margin: 1em 0;
+}
+
+.tiptap-editor .ProseMirror ul,
+.tiptap-editor .ProseMirror ol {
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.tiptap-editor .ProseMirror li {
+  margin-bottom: 0.25em;
+}
+
+.tiptap-editor .ProseMirror code {
+  background: #313244;
+  color: #a6e3a1;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-family: "JetBrains Mono", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.tiptap-editor .ProseMirror pre {
+  background: #181825;
+  border-radius: 6px;
+  padding: 1em;
+  margin: 1em 0;
+  overflow-x: auto;
+}
+
+.tiptap-editor .ProseMirror pre code {
+  background: none;
+  padding: 0;
+}
+
+.tiptap-editor .ProseMirror hr {
+  border: none;
+  border-top: 1px solid #313244;
+  margin: 2em 0;
+}
+
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #6c7086;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+.tiptap-editor .ProseMirror ::selection {
+  background: rgba(203, 166, 247, 0.3);
+}
