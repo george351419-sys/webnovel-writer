@@ -56,7 +56,36 @@ ${worldviewText}
 【人物设定】
 ${charactersText}
 
-${chapterSection}`
+${chapterSection}
+
+---
+
+当用户要求你生成需要保存到文件的内容时（如世界观设定、人物档案、章节草稿等），请使用以下格式输出，让内容可以直接写入对应文件：
+
+---WRITE_TO:[type]---
+[内容]
+---END---
+
+type 的可选值：
+- worldview（世界观账本）
+- characters（人物矩阵）
+- resources（资源账本）
+- hooks（悬念钩子）
+- summaries（章节摘要）
+- subplots（支线追踪）
+- emotional（情感弧线）
+- chapter_draft（当前章节草稿）
+
+示例：如果用户说"帮我设计世界观"，你应该输出：
+先用几句话描述你的思路，然后：
+---WRITE_TO:worldview---
+（完整的世界观内容，可以很长）
+---END---
+
+注意：
+1. 一次回复可以包含多个 WRITE_TO 块
+2. WRITE_TO 块之外的内容正常显示在对话中
+3. 如果用户只是问问题、不需要写入文件，就正常回复，不用 WRITE_TO 格式`
 
   const recentHistory = history.slice(-10)
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [

@@ -139,7 +139,7 @@ export default function RightPanel() {
   }
 
   return (
-    <aside className="w-72 flex-shrink-0 flex flex-col bg-ctp-mantle border-l border-ctp-surface0 overflow-hidden">
+    <aside className="w-full h-full flex flex-col bg-ctp-mantle border-l border-ctp-surface0 overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-ctp-surface0 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">

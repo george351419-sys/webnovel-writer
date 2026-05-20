@@ -28,7 +28,7 @@ export default function LeftSidebar() {
   }, [projectId, loadChapters, ensureTruthFiles])
 
   return (
-    <aside className="w-40 flex-shrink-0 flex flex-col bg-ctp-mantle border-r border-ctp-surface0 overflow-hidden">
+    <aside className="w-full h-full flex flex-col bg-ctp-mantle border-r border-ctp-surface0 overflow-hidden">
       <div className="px-3 py-2.5 border-b border-ctp-surface0 flex items-center gap-2 flex-shrink-0">
         <BookOpen className="w-3.5 h-3.5 text-ctp-mauve flex-shrink-0" />
         <span className="text-xs font-semibold text-ctp-text truncate">

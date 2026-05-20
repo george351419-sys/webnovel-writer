@@ -1,3 +1,4 @@
+import { Group, Panel, Separator } from 'react-resizable-panels'
 import { useUiStore } from '@/store/ui'
 import { useTruthFilesStore } from '@/store/truthFiles'
 import { useProjectsStore } from '@/store/projects'
@@ -31,10 +32,18 @@ export default function WorkspaceLayout() {
   })()
 
   return (
-    <div className="h-full w-full flex bg-ctp-base overflow-hidden">
-      <LeftSidebar />
-      {centerPanel}
-      <RightPanel />
-    </div>
+    <Group orientation="horizontal" className="h-full w-full">
+      <Panel defaultSize={14} minSize={10} maxSize={30}>
+        <LeftSidebar />
+      </Panel>
+      <Separator className="w-1 bg-ctp-surface0 hover:bg-ctp-mauve/60 transition-colors cursor-col-resize" />
+      <Panel defaultSize={56} minSize={30}>
+        {centerPanel}
+      </Panel>
+      <Separator className="w-1 bg-ctp-surface0 hover:bg-ctp-mauve/60 transition-colors cursor-col-resize" />
+      <Panel defaultSize={30} minSize={20} maxSize={50}>
+        <RightPanel />
+      </Panel>
+    </Group>
   )
 }

@@ -1,18 +1,69 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, SendHorizontal, Square } from 'lucide-react'
+import { Bot, Check, Download, FileText, SendHorizontal, Square } from 'lucide-react'
 import { useChatStore } from '@/store/chat'
 import { useChaptersStore } from '@/store/chapters'
 import { useProjectsStore } from '@/store/projects'
 import { useTruthFilesStore } from '@/store/truthFiles'
 import { useModelConfigStore } from '@/store/modelConfig'
 import { sendChatMessage } from '@/engine/chat/chatEngine'
+import { parseMessage, WRITE_TARGET_LABELS } from '@/engine/chat/messageParser'
+import type { WriteBlock, WriteTarget } from '@/engine/chat/messageParser'
+import type { TruthFileType } from '@/types'
+
+interface WriteCardProps {
+  block: WriteBlock
+  onApply: (target: WriteTarget, content: string) => Promise<void>
+}
+
+function WriteCard({ block, onApply }: WriteCardProps) {
+  const [applied, setApplied] = useState(false)
+  const [applying, setApplying] = useState(false)
+
+  const handleApply = async () => {
+    setApplying(true)
+    await onApply(block.target, block.content)
+    setApplied(true)
+    setApplying(false)
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-ctp-surface1 bg-ctp-base overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-ctp-surface0 border-b border-ctp-surface1">
+        <div className="flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5 text-ctp-mauve" />
+          <span className="text-xs font-medium text-ctp-mauve">{WRITE_TARGET_LABELS[block.target]}</span>
+        </div>
+        <button
+          onClick={handleApply}
+          disabled={applying || applied}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            applied
+              ? 'bg-ctp-green/20 text-ctp-green cursor-default'
+              : 'bg-ctp-mauve text-ctp-base hover:opacity-90 disabled:opacity-50'
+          }`}
+        >
+          {applied ? (
+            <><Check className="w-3 h-3" /> 已写入</>
+          ) : applying ? (
+            '写入中...'
+          ) : (
+            <><Download className="w-3 h-3" /> 写入文件</>
+          )}
+        </button>
+      </div>
+      <pre className="px-3 py-2 text-xs text-ctp-subtext1 leading-relaxed whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+        {block.content}
+      </pre>
+    </div>
+  )
+}
 
 export default function ChatPanel() {
   const { messages, isStreaming, addUserMessage, addAssistantMessage, appendChunk, finalizeMessage, setStreaming } =
     useChatStore()
-  const { chapters, currentChapterId } = useChaptersStore()
+  const { chapters, currentChapterId, updateChapterContent } = useChaptersStore()
   const { projects, currentProjectId } = useProjectsStore()
-  const { truthFiles } = useTruthFilesStore()
+  const { truthFiles, updateTruthFile } = useTruthFilesStore()
   const isConfigured = useModelConfigStore((s) => s.isConfigured)
 
   const chapter = chapters.find((c) => c.uid === currentChapterId) ?? null
@@ -102,6 +153,18 @@ export default function ChatPanel() {
     abortRef.current?.abort()
   }
 
+  const handleApply = async (target: WriteTarget, content: string) => {
+    if (target === 'chapter_draft') {
+      if (chapter) {
+        await updateChapterContent(chapter.uid, 'draft', content)
+      }
+    } else {
+      if (project) {
+        await updateTruthFile(project.uid, target as TruthFileType, content)
+      }
+    }
+  }
+
   // Quick-action chips
   const quickActions = chapter
     ? [
@@ -156,25 +219,34 @@ export default function ChatPanel() {
             </p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+          messages.map((msg) => {
+            const parsed = parseMessage(msg.content)
+            return (
               <div
-                className={`max-w-[90%] px-3 py-2 rounded-lg text-xs leading-relaxed whitespace-pre-wrap break-words ${
-                  msg.role === 'user'
-                    ? 'bg-ctp-mauve/20 text-ctp-text max-w-[85%]'
-                    : 'bg-ctp-surface0 text-ctp-text'
-                }`}
+                key={msg.id}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {msg.content}
-                {msg.isStreaming && (
-                  <span className="inline-block w-0.5 h-4 bg-ctp-mauve animate-pulse ml-0.5 align-text-bottom" />
-                )}
+                <div
+                  className={`max-w-[90%] px-3 py-2 rounded-lg text-xs leading-relaxed break-words ${
+                    msg.role === 'user'
+                      ? 'bg-ctp-mauve/20 text-ctp-text max-w-[85%]'
+                      : 'bg-ctp-surface0 text-ctp-text'
+                  }`}
+                >
+                  {parsed.segments.map((seg, i) =>
+                    seg.type === 'text' ? (
+                      <span key={i} className="whitespace-pre-wrap">{seg.content}</span>
+                    ) : (
+                      <WriteCard key={i} block={seg.block} onApply={handleApply} />
+                    )
+                  )}
+                  {msg.isStreaming && (
+                    <span className="inline-block w-0.5 h-4 bg-ctp-mauve animate-pulse ml-0.5 align-text-bottom" />
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
         <div ref={bottomRef} />
       </div>
