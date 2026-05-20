@@ -1,5 +1,6 @@
 .tiptap-editor {
-  height: 100%;
+  flex: 1;
+  min-height: 0;        /* flex 子元素必须设置，否则内容撑开容器而不滚动 */
   overflow-y: scroll;
   scrollbar-width: thin;
   scrollbar-color: #45475a transparent;

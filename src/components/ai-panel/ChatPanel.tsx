@@ -339,6 +339,7 @@ export default function ChatPanel() {
         history,
         project,
         chapter,
+        allChapters: chapters,
         truthFiles,
         onChunk,
         signal: abortRef.current.signal,

@@ -20,7 +20,7 @@ export default function Editor({ content, onChange, placeholder, editable = true
   })
 
   return (
-    <div className="tiptap-editor flex-1 overflow-y-auto">
+    <div className="tiptap-editor">
       <EditorContent editor={editor} />
     </div>
   )

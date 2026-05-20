@@ -2,49 +2,74 @@ import { streamCompletion } from '@/model/router'
 import { GENRE_MAP } from '@/genres'
 import type { Project, Chapter, TruthFile } from '@/types'
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim()
+}
+
 export async function sendChatMessage(params: {
   userMessage: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   project: Project
   chapter: Chapter | null
+  allChapters: Chapter[]
   truthFiles: TruthFile[]
   onChunk: (accumulated: string) => void
   signal?: AbortSignal
 }): Promise<string> {
-  const { userMessage, history, project, chapter, truthFiles, onChunk, signal } = params
+  const { userMessage, history, project, chapter, allChapters, truthFiles, onChunk, signal } = params
 
   const genreData = GENRE_MAP[project.genre]
   const genreLabel = genreData?.name ?? project.genre
 
   const worldview = truthFiles.find((f) => f.type === 'worldview')?.content ?? ''
   const characters = truthFiles.find((f) => f.type === 'characters')?.content ?? ''
+  const summaries = truthFiles.find((f) => f.type === 'summaries')?.content ?? ''
 
-  const worldviewText = worldview
-    ? worldview.slice(0, 800)
-    : '暂未填写'
+  const worldviewText = worldview ? worldview.slice(0, 1000) : '暂未填写'
+  const charactersText = characters ? characters.slice(0, 800) : '暂未填写'
 
-  const charactersText = characters
-    ? characters.slice(0, 600)
-    : '暂未填写'
+  // 已有章节列表
+  const sortedChapters = [...allChapters].sort((a, b) => a.order - b.order)
+  const STATUS_ZH: Record<string, string> = {
+    planning: '规划中', drafting: '草稿', auditing: '审稿中', revising: '修订中', confirmed: '已完成'
+  }
+  const chapterListText = sortedChapters.length > 0
+    ? sortedChapters.map((c, i) =>
+        `第${i + 1}章《${c.title}》- ${STATUS_ZH[c.status] ?? c.status} - ${c.wordCount}字`
+      ).join('\n')
+    : '（暂无章节）'
 
+  // 最近已完成的章节内容（供续写参考，最多取最近2章）
+  const recentDoneChapters = sortedChapters
+    .filter((c) => c.status === 'confirmed' || c.wordCount > 100)
+    .slice(-2)
+
+  const recentContentText = recentDoneChapters.length > 0
+    ? recentDoneChapters.map((c, i) => {
+        const raw = stripHtml(c.revised || c.draft || c.final || '')
+        const preview = raw.slice(-1500) // 取末尾1500字，最接近当前进度
+        return `${c.title}（末尾内容）：\n${preview}`
+      }).join('\n\n---\n\n')
+    : ''
+
+  // 章节摘要
+  const summariesText = summaries ? summaries.slice(0, 600) : ''
+
+  // 当前章节详情
   let chapterSection: string
   if (chapter) {
-    const contentPreview = (chapter.draft || chapter.final || '').slice(0, 500)
-    chapterSection = `【当前章节】
+    const raw = stripHtml(chapter.draft || chapter.final || '')
+    const contentPreview = raw.slice(0, 800)
+    chapterSection = `【当前选中章节】
 标题：${chapter.title}
-状态：${chapter.status}
-字数：${chapter.wordCount} 字
-目标：${chapter.plan.wordTarget} 字
-${contentPreview ? `内容预览：\n${contentPreview}` : '（暂无内容）'}`
+状态：${STATUS_ZH[chapter.status] ?? chapter.status}
+已写字数：${chapter.wordCount} 字 / 目标 ${chapter.plan.wordTarget} 字
+${contentPreview ? `内容：\n${contentPreview}` : '（暂无内容，待创作）'}`
   } else {
-    chapterSection = '【当前章节】\n未选中任何章节'
+    chapterSection = '【当前选中章节】\n未选中，可直接让我创建新章节'
   }
 
-  const systemPrompt = `你是专业的网文写作助手，帮助作者创作网文。你能看到当前项目的完整信息，可以帮助：
-- 分析情节、人物、世界观
-- 建议章节走向
-- 回答写作相关问题
-- 生成指定内容（用户要求时）
+  const systemPrompt = `你是专业的网文写作 Agent，帮助作者创作网文，可以直接创建章节、续写内容、维护故事提纲。
 
 【当前项目】
 项目名：${project.name}
@@ -55,6 +80,11 @@ ${worldviewText}
 
 【人物设定】
 ${charactersText}
+${summariesText ? `\n【章节摘要】\n${summariesText}` : ''}
+
+【全部章节（共${sortedChapters.length}章）】
+${chapterListText}
+${recentContentText ? `\n【最近章节内容（续写参考）】\n${recentContentText}` : ''}
 
 ${chapterSection}
 
