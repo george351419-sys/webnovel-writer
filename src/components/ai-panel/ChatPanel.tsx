@@ -153,7 +153,7 @@ export default function ChatPanel() {
     return null
   }, [createChapter, setCurrentChapter, updateChapterContent, updateTruthFile, setActiveView, setStreamingText])
 
-  // 流式结束后，顺序执行最新消息里的所有 ACTION 块
+  // 流式结束后，执行还未被流式处理的 ACTION 块（如 write_worldview 等）
   useEffect(() => {
     if (isStreaming) return
     const latestMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming)
@@ -171,18 +171,24 @@ export default function ChatPanel() {
     const msgId = latestMsg.id
     const lastCreatedChapterId = { current: null as string | null }
 
-    // 初始化所有 block 为 pending
     setBlockStatuses((prev) => {
       const next = { ...prev }
-      actionBlocks.forEach(({ idx }) => { next[`${msgId}-${idx}`] = 'pending' })
+      actionBlocks.forEach(({ idx }) => {
+        const key = `${msgId}-${idx}`
+        // 已被流式阶段处理的跳过，直接标为 done
+        if (!next[key]) next[key] = 'pending'
+      })
       return next
     })
 
-    // 顺序执行
     ;(async () => {
       for (const { seg, idx } of actionBlocks) {
         if (seg.type !== 'action') continue
         const key = `${msgId}-${idx}`
+        // 已在流式阶段标为 done → 跳过，只补充 navTarget
+        if (blockStatuses[key] === 'done') {
+          continue
+        }
         setBlockStatuses((prev) => ({ ...prev, [key]: 'running' }))
         try {
           const nav = await executeBlock(seg.block, { projectId: project.uid, lastCreatedChapterId })
@@ -193,7 +199,7 @@ export default function ChatPanel() {
         }
       }
     })()
-  }, [isStreaming, messages, project, executeBlock])
+  }, [isStreaming, messages, project, executeBlock])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isStreaming || !project) return
@@ -210,6 +216,97 @@ export default function ChatPanel() {
     const assistantId = addAssistantMessage()
     abortRef.current = new AbortController()
 
+    // ─── 实时流式解析状态机 ───
+    type StreamMode = 'chat' | 'in_create' | 'in_draft' | 'in_other'
+    const ctx = {
+      mode: 'chat' as StreamMode,
+      lineBuffer: '',
+      fullOutput: '',       // 最终存入消息的完整内容（chat文本 + ACTION块）
+      blockBuf: '',         // 当前 ACTION 块的内容
+      currentType: '',      // 当前 ACTION 类型
+      lastCreatedId: null as string | null,
+      pendingCreate: null as Promise<void> | null,
+      draftCharCount: 0,
+    }
+
+    const flushLine = (line: string) => {
+      const actionStart = line.match(/^---ACTION:(\w+)---$/)
+      if (actionStart) {
+        const type = actionStart[1]
+        ctx.mode = type === 'create_chapter' ? 'in_create'
+          : type === 'write_chapter_draft' ? 'in_draft'
+          : 'in_other'
+        ctx.currentType = type
+        ctx.blockBuf = ''
+        // 进入草稿模式：立即切换到编辑区并清空流式文本
+        if (ctx.mode === 'in_draft') {
+          setActiveView('editor')
+          setStreamingText('')
+        }
+        return
+      }
+
+      if (line === '---END---') {
+        const content = ctx.blockBuf.trim()
+        if (ctx.mode === 'in_create') {
+          const title = content || '新章节'
+          ctx.pendingCreate = (async () => {
+            const ch = await createChapter(project.uid, title)
+            ctx.lastCreatedId = ch.uid
+            setCurrentChapter(ch.uid)
+            setActiveView('editor')
+          })()
+          ctx.fullOutput += `---ACTION:create_chapter---\n${title}\n---END---\n`
+        } else if (ctx.mode === 'in_draft') {
+          ctx.draftCharCount = content.length
+          const draftHtml = textToHtml(content)
+          const capturedId = ctx.lastCreatedId  // 闭包捕获
+          const pendingRef = ctx.pendingCreate
+          ;(async () => {
+            if (pendingRef) await pendingRef     // 等章节建完
+            const targetId = capturedId ?? useChaptersStore.getState().currentChapterId
+            if (targetId) {
+              await updateChapterContent(targetId, 'draft', draftHtml)
+              setTimeout(() => setStreamingText(null), 80)
+            }
+          })()
+          // 存入消息：保留 content 供 ActionCard 计算字数
+          ctx.fullOutput += `---ACTION:write_chapter_draft---\n${content}\n---END---\n`
+        } else {
+          // 其他 ACTION（write_worldview 等）：存入消息，交给流式结束后的执行器
+          ctx.fullOutput += `---ACTION:${ctx.currentType}---\n${content}\n---END---\n`
+        }
+        ctx.mode = 'chat'
+        ctx.blockBuf = ''
+        ctx.currentType = ''
+        appendChunk(assistantId, ctx.fullOutput)
+        return
+      }
+
+      // 普通内容行
+      if (ctx.mode === 'chat') {
+        ctx.fullOutput += line + '\n'
+        appendChunk(assistantId, ctx.fullOutput)
+      } else if (ctx.mode === 'in_draft') {
+        ctx.blockBuf += line + '\n'
+        // 实时流入中间编辑区
+        setStreamingText(textToHtml(ctx.blockBuf))
+      } else {
+        ctx.blockBuf += line + '\n'
+      }
+    }
+
+    let prevLen = 0
+    const onChunk = (accumulated: string) => {
+      const delta = accumulated.slice(prevLen)
+      prevLen = accumulated.length
+      ctx.lineBuffer += delta
+      const lines = ctx.lineBuffer.split('\n')
+      ctx.lineBuffer = lines.pop() ?? ''
+      for (const line of lines) flushLine(line)
+    }
+    // ─── 状态机结束 ───
+
     try {
       await sendChatMessage({
         userMessage: content.trim(),
@@ -217,19 +314,44 @@ export default function ChatPanel() {
         project,
         chapter,
         truthFiles,
-        onChunk: (accumulated) => appendChunk(assistantId, accumulated),
+        onChunk,
         signal: abortRef.current.signal,
+      })
+      // 处理末尾未换行的内容
+      if (ctx.lineBuffer.trim()) {
+        flushLine(ctx.lineBuffer)
+        ctx.lineBuffer = ''
+      }
+      // 流式结束后，把 create_chapter 和 write_chapter_draft 对应的 block 标为 done
+      // 让 post-stream useEffect 跳过它们
+      const finalSegments = parseMessage(ctx.fullOutput)
+      const msgId = assistantId
+      finalSegments.forEach((seg, idx) => {
+        if (seg.type === 'action' &&
+            (seg.block.type === 'create_chapter' || seg.block.type === 'write_chapter_draft')) {
+          const key = `${msgId}-${idx}`
+          setBlockStatuses((prev) => ({ ...prev, [key]: 'done' }))
+          // 设置 navTarget
+          if (seg.block.type === 'create_chapter' && ctx.lastCreatedId) {
+            setNavTargets((prev) => ({ ...prev, [key]: { kind: 'chapter', uid: ctx.lastCreatedId!, title: seg.block.content.trim() } }))
+          } else if (seg.block.type === 'write_chapter_draft') {
+            const targetId = ctx.lastCreatedId ?? useChaptersStore.getState().currentChapterId
+            const title = useChaptersStore.getState().chapters.find(c => c.uid === targetId)?.title ?? '章节'
+            if (targetId) setNavTargets((prev) => ({ ...prev, [key]: { kind: 'chapter', uid: targetId, title } }))
+          }
+        }
       })
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
-        appendChunk(assistantId, '抱歉，发生了错误，请重试。')
+        appendChunk(assistantId, ctx.fullOutput + '\n抱歉，发生了错误，请重试。')
       }
+      setStreamingText(null)
     } finally {
       finalizeMessage(assistantId)
       setStreaming(false)
       abortRef.current = null
     }
-  }, [isStreaming, project, messages, chapter, truthFiles, addUserMessage, addAssistantMessage, appendChunk, finalizeMessage, setStreaming])
+  }, [isStreaming, project, messages, chapter, truthFiles, addUserMessage, addAssistantMessage, appendChunk, finalizeMessage, setStreaming, createChapter, setCurrentChapter, updateChapterContent, setActiveView, setStreamingText])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
