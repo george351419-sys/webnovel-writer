@@ -217,13 +217,20 @@ export default function ChatPanel() {
     abortRef.current = new AbortController()
 
     // ─── 实时流式解析状态机 ───
-    type StreamMode = 'chat' | 'in_create' | 'in_draft' | 'in_other'
+    // 故事提纲文件的 ACTION 类型映射
+    const TRUTH_ACTION_MAP: Record<string, TruthFileType> = {
+      write_worldview: 'worldview', write_characters: 'characters',
+      write_resources: 'resources', write_hooks: 'hooks',
+      write_summaries: 'summaries', write_subplots: 'subplots',
+      write_emotional: 'emotional',
+    }
+    type StreamMode = 'chat' | 'in_create' | 'in_draft' | 'in_truth' | 'in_other'
     const ctx = {
       mode: 'chat' as StreamMode,
       lineBuffer: '',
-      fullOutput: '',       // 最终存入消息的完整内容（chat文本 + ACTION块）
-      blockBuf: '',         // 当前 ACTION 块的内容
-      currentType: '',      // 当前 ACTION 类型
+      fullOutput: '',
+      blockBuf: '',
+      currentType: '',
       lastCreatedId: null as string | null,
       pendingCreate: null as Promise<void> | null,
       draftCharCount: 0,
@@ -233,21 +240,28 @@ export default function ChatPanel() {
       const actionStart = line.match(/^---ACTION:(\w+)---$/)
       if (actionStart) {
         const type = actionStart[1]
-        ctx.mode = type === 'create_chapter' ? 'in_create'
-          : type === 'write_chapter_draft' ? 'in_draft'
-          : 'in_other'
         ctx.currentType = type
         ctx.blockBuf = ''
-        // 进入草稿模式：立即切换到编辑区并清空流式文本
-        if (ctx.mode === 'in_draft') {
+        if (type === 'create_chapter') {
+          ctx.mode = 'in_create'
+        } else if (type === 'write_chapter_draft') {
+          ctx.mode = 'in_draft'
           setActiveView('editor')
           setStreamingText('')
+        } else if (TRUTH_ACTION_MAP[type]) {
+          // 故事提纲文件：流式写入中间编辑区（切到编辑器视图显示）
+          ctx.mode = 'in_truth'
+          setActiveView('editor')
+          setStreamingText('')
+        } else {
+          ctx.mode = 'in_other'
         }
         return
       }
 
       if (line === '---END---') {
         const content = ctx.blockBuf.trim()
+
         if (ctx.mode === 'in_create') {
           const title = content || '新章节'
           ctx.pendingCreate = (async () => {
@@ -257,23 +271,35 @@ export default function ChatPanel() {
             setActiveView('editor')
           })()
           ctx.fullOutput += `---ACTION:create_chapter---\n${title}\n---END---\n`
+
         } else if (ctx.mode === 'in_draft') {
           ctx.draftCharCount = content.length
           const draftHtml = textToHtml(content)
-          const capturedId = ctx.lastCreatedId  // 闭包捕获
+          const capturedId = ctx.lastCreatedId
           const pendingRef = ctx.pendingCreate
           ;(async () => {
-            if (pendingRef) await pendingRef     // 等章节建完
+            if (pendingRef) await pendingRef
             const targetId = capturedId ?? useChaptersStore.getState().currentChapterId
             if (targetId) {
               await updateChapterContent(targetId, 'draft', draftHtml)
               setTimeout(() => setStreamingText(null), 80)
             }
           })()
-          // 存入消息：保留 content 供 ActionCard 计算字数
           ctx.fullOutput += `---ACTION:write_chapter_draft---\n${content}\n---END---\n`
+
+        } else if (ctx.mode === 'in_truth') {
+          // 保存到故事提纲文件，然后切换到对应文件视图
+          const fileType = TRUTH_ACTION_MAP[ctx.currentType]
+          if (fileType) {
+            ;(async () => {
+              await updateTruthFile(project.uid, fileType, content)
+              setCurrentType(fileType)
+              setActiveView('truth-file')
+            })()
+          }
+          ctx.fullOutput += `---ACTION:${ctx.currentType}---\n${content}\n---END---\n`
+
         } else {
-          // 其他 ACTION（write_worldview 等）：存入消息，交给流式结束后的执行器
           ctx.fullOutput += `---ACTION:${ctx.currentType}---\n${content}\n---END---\n`
         }
         ctx.mode = 'chat'
@@ -287,10 +313,10 @@ export default function ChatPanel() {
       if (ctx.mode === 'chat') {
         ctx.fullOutput += line + '\n'
         appendChunk(assistantId, ctx.fullOutput)
-      } else if (ctx.mode === 'in_draft') {
+      } else if (ctx.mode === 'in_draft' || ctx.mode === 'in_truth') {
         ctx.blockBuf += line + '\n'
-        // 实时流入中间编辑区
-        setStreamingText(textToHtml(ctx.blockBuf))
+        // 实时流入中间编辑区（draft 保持 HTML，truth 用纯文本）
+        setStreamingText(ctx.mode === 'in_draft' ? textToHtml(ctx.blockBuf) : ctx.blockBuf)
       } else {
         ctx.blockBuf += line + '\n'
       }

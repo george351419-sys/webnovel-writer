@@ -40,9 +40,9 @@ export async function updateTruthFilesAfterConfirm(params: {
     .map((f) => `【${TRUTH_FILE_LABELS[f.type]}】\n${f.content || '（暂无内容）'}`)
     .join('\n\n')
 
-  const systemPrompt = `你是一位专业的网文编辑助手，负责在章节确认后更新"真相文件"（存储小说关键信息的文档）。
+  const systemPrompt = `你是一位专业的网文编辑助手，负责在章节确认后更新"故事提纲"（存储小说关键信息的文档）。
 
-真相文件说明：
+故事提纲说明：
 - 世界观设定：世界规则、地理、历史背景等
 - 人物设定：角色外貌、性格、能力、关系等
 - 资源道具：重要物品、法宝、财富等
@@ -70,13 +70,13 @@ export async function updateTruthFilesAfterConfirm(params: {
   const userPrompt = `【项目名称】${project.name}
 【当前章节】第${chapter.order}章《${chapter.title}》
 
-【现有真相文件内容】
+【现有故事提纲内容】
 ${currentFilesContext}
 
 【本章正文内容】
 ${plainText}
 
-请分析本章内容，提取新增或变化的信息，更新对应的真相文件。章节摘要必须更新（追加本章摘要）。`
+请分析本章内容，提取新增或变化的信息，更新对应的故事提纲。章节摘要必须更新（追加本章摘要）。`
 
   const result = await completeJson<UpdateResponse>('writing', [
     { role: 'system', content: systemPrompt },

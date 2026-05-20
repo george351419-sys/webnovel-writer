@@ -317,7 +317,7 @@ export default function RightPanel() {
                 {chapter.status === 'revising' && !loading && (
                   <div className="space-y-2">
                     <p className="text-xs text-ctp-subtext1">修订稿已生成，请在编辑器中查看。</p>
-                    <p className="text-xs text-ctp-subtext0 mt-1">满意后点击「确认本章」完成并更新真相文件。</p>
+                    <p className="text-xs text-ctp-subtext0 mt-1">满意后点击「确认本章」完成并更新故事提纲。</p>
                   </div>
                 )}
 
@@ -329,7 +329,7 @@ export default function RightPanel() {
                   <div className="text-center py-4">
                     <div className="text-2xl mb-2">🎉</div>
                     <p className="text-xs text-ctp-green font-semibold">本章已确认完成</p>
-                    <p className="text-xs text-ctp-subtext0 mt-1">真相文件已自动更新</p>
+                    <p className="text-xs text-ctp-subtext0 mt-1">故事提纲已自动更新</p>
                   </div>
                 )}
               </div>

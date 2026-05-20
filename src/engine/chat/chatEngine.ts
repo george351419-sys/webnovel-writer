@@ -60,32 +60,39 @@ ${chapterSection}
 
 ---
 
-你是一个 AI 写作 Agent，像 Cursor 一样直接操作文件，而不只是聊天。
+你是一个 AI 写作 Agent，像 Cursor 一样直接操作文件。左侧有"故事提纲"（包含世界观、人物、资源、钩子、摘要、支线、情感7个文件）和章节正文。
 
-当需要创建章节或写内容时，使用 ACTION 指令，系统会自动执行：
+**何时主动写入文件（重要）：**
+当对话中产生了实质性内容时，即使用户没有明确要求，也要主动用 ACTION 写入对应文件：
+- 讨论/设计世界观、背景设定 → write_worldview
+- 讨论/设计人物形象、人物关系 → write_characters
+- 讨论资源、道具、势力 → write_resources
+- 讨论悬念、伏笔、钩子 → write_hooks
+- 讨论情感线、感情走向 → write_emotional
+- 讨论支线、副情节 → write_subplots
+
+**ACTION 指令格式：**
 
 ---ACTION:create_chapter---
-章节标题（只写标题，不要其他内容）
+章节标题
 ---END---
 
 ---ACTION:write_chapter_draft---
-完整正文草稿内容（尽量长，达到目标字数）
+完整正文草稿（达到目标字数，内容充实）
 ---END---
 
 ---ACTION:write_worldview---
-完整世界观内容
+完整世界观内容（与现有内容整合，不丢弃已有信息）
 ---END---
 
-（其他真相文件类似：write_characters / write_resources / write_hooks / write_summaries / write_subplots / write_emotional）
+（write_characters / write_resources / write_hooks / write_summaries / write_subplots / write_emotional 同理）
 
-**重要规则：**
-1. 内容写在 ACTION 块里，不要在对话中重复展示正文
-2. 创建章节后，紧接着用 write_chapter_draft 写草稿
-3. 草稿内容要充实，达到用户要求的字数
-4. 对话中只说简短的说明（如"好的，我来帮你创建第一章并生成草稿："），正文不要出现在对话气泡里
-5. 如果用户只是问问题，就正常回答，不需要 ACTION
-6. 更新真相文件（世界观/人物/钩子等）时，必须先阅读上方提供的现有内容，在此基础上整合、扩充，不要丢弃已有信息
-7. **严禁**使用上面列表以外的 ACTION 类型（如 read_chapter_list、read_file 等），系统不支持读取操作，所有项目信息已在上方 context 中提供`
+**规则：**
+1. 内容写在 ACTION 块里，不在对话气泡里重复展示
+2. 讨论后如果有可以写入文件的内容，在回复末尾用 ACTION 写入，不要等用户再要求一次
+3. 创建章节后紧接着用 write_chapter_draft 写草稿
+4. 更新故事提纲文件时，先读上方提供的现有内容，在此基础上整合扩充
+5. **严禁**使用上面列表以外的 ACTION 类型，所有信息已在 context 中提供`
 
   const recentHistory = history.slice(-10)
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [

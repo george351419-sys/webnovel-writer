@@ -65,7 +65,7 @@ export default function TruthFileList({ expanded, onToggle }: Props) {
         className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ctp-subtext0 hover:text-ctp-text transition-colors"
       >
         <Brain className="w-3.5 h-3.5 flex-shrink-0" />
-        <span>真相文件</span>
+        <span>故事提纲</span>
         <span className="ml-auto text-ctp-overlay0">{expanded ? '▾' : '▸'}</span>
       </button>
 

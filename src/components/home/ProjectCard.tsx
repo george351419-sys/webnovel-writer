@@ -147,7 +147,7 @@ export default function ProjectCard({ project }: Props) {
         >
           <p className="text-xs text-ctp-text text-center px-4">
             删除《{project.name}》？<br />
-            <span className="text-ctp-subtext0">所有章节和真相文件将一并删除</span>
+            <span className="text-ctp-subtext0">所有章节和故事提纲将一并删除</span>
           </p>
           <div className="flex items-center gap-2">
             <button
