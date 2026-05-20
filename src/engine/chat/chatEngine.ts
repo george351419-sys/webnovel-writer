@@ -83,7 +83,8 @@ ${chapterSection}
 2. 创建章节后，紧接着用 write_chapter_draft 写草稿
 3. 草稿内容要充实，达到用户要求的字数
 4. 对话中只说简短的说明（如"好的，我来帮你创建第一章并生成草稿："），正文不要出现在对话气泡里
-5. 如果用户只是问问题，就正常回答，不需要 ACTION`
+5. 如果用户只是问问题，就正常回答，不需要 ACTION
+6. 更新真相文件（世界观/人物/钩子等）时，必须先阅读上方提供的现有内容，在此基础上整合、扩充，不要丢弃已有信息`
 
   const recentHistory = history.slice(-10)
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [

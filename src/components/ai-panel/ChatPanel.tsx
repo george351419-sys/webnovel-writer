@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Check, FileText, Loader2, SendHorizontal, Square } from 'lucide-react'
+import { ArrowRight, Bot, Check, FileText, Loader2, SendHorizontal, Square } from 'lucide-react'
 import { useChatStore } from '@/store/chat'
 import { useChaptersStore } from '@/store/chapters'
 import { useProjectsStore } from '@/store/projects'
@@ -10,6 +10,10 @@ import { sendChatMessage } from '@/engine/chat/chatEngine'
 import { parseMessage, ACTION_LABELS, ACTION_TRUTH_FILE_MAP } from '@/engine/chat/messageParser'
 import type { ActionBlock, ActionType } from '@/engine/chat/messageParser'
 import type { TruthFileType } from '@/types'
+
+type NavTarget =
+  | { kind: 'chapter'; uid: string; title: string }
+  | { kind: 'truth-file'; fileType: TruthFileType; label: string }
 
 // 纯文本 → HTML 段落
 function textToHtml(text: string): string {
@@ -26,9 +30,11 @@ type BlockStatus = 'pending' | 'running' | 'done' | 'error'
 interface ActionCardProps {
   block: ActionBlock
   status: BlockStatus
+  navTarget?: NavTarget
+  onNavigate?: (nav: NavTarget) => void
 }
 
-function ActionCard({ block, status }: ActionCardProps) {
+function ActionCard({ block, status, navTarget, onNavigate }: ActionCardProps) {
   const label = ACTION_LABELS[block.type]
   const summary =
     block.type === 'create_chapter'
@@ -39,16 +45,24 @@ function ActionCard({ block, status }: ActionCardProps) {
 
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
-      status === 'done'    ? 'bg-ctp-green/10 border-ctp-green/30 text-ctp-green'
-      : status === 'error' ? 'bg-ctp-red/10 border-ctp-red/30 text-ctp-red'
+      status === 'done'      ? 'bg-ctp-green/10 border-ctp-green/30 text-ctp-green'
+      : status === 'error'   ? 'bg-ctp-red/10 border-ctp-red/30 text-ctp-red'
       : status === 'running' ? 'bg-ctp-blue/10 border-ctp-blue/30 text-ctp-blue'
       : 'bg-ctp-surface0 border-ctp-surface1 text-ctp-subtext1'
     }`}>
-      {status === 'done'    ? <Check className="w-3 h-3 flex-shrink-0" />
+      {status === 'done'     ? <Check className="w-3 h-3 flex-shrink-0" />
        : status === 'running' ? <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin" />
        : status === 'error'   ? <span>✗</span>
        : <FileText className="w-3 h-3 flex-shrink-0" />}
-      <span>{label}{summary ? ` ${summary}` : ''}</span>
+      <span className="flex-1">{label}{summary ? ` ${summary}` : ''}</span>
+      {status === 'done' && navTarget && onNavigate && (
+        <button
+          onClick={() => onNavigate(navTarget)}
+          className="ml-1 flex items-center gap-0.5 text-xs opacity-70 hover:opacity-100 transition-opacity underline underline-offset-2"
+        >
+          查看 <ArrowRight className="w-3 h-3" />
+        </button>
+      )}
     </div>
   )
 }
@@ -57,7 +71,7 @@ export default function ChatPanel() {
   const { messages, isStreaming, addUserMessage, addAssistantMessage, appendChunk, finalizeMessage, setStreaming } = useChatStore()
   const { chapters, currentChapterId, createChapter, setCurrentChapter, updateChapterContent } = useChaptersStore()
   const { projects, currentProjectId } = useProjectsStore()
-  const { truthFiles, updateTruthFile } = useTruthFilesStore()
+  const { truthFiles, updateTruthFile, setCurrentType } = useTruthFilesStore()
   const isConfigured = useModelConfigStore((s) => s.isConfigured)
   const { setActiveView, setStreamingText } = useUiStore()
 
@@ -69,21 +83,31 @@ export default function ChatPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // 记录每条消息中每个 action block 的执行状态
   // key: `${messageId}-${blockIndex}`
   const [blockStatuses, setBlockStatuses] = useState<Record<string, BlockStatus>>({})
-  // 已开始执行过的消息 ID，防止重复执行
+  const [navTargets, setNavTargets] = useState<Record<string, NavTarget>>({})
   const executedRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 单条 block 执行器（接收外部传入的 lastCreatedId 以保证顺序）
+  // 点击「查看」按钮时的导航处理
+  const handleNavigate = useCallback((nav: NavTarget) => {
+    if (nav.kind === 'chapter') {
+      setCurrentChapter(nav.uid)
+      setActiveView('editor')
+    } else {
+      setCurrentType(nav.fileType)
+      setActiveView('truth-file')
+    }
+  }, [setCurrentChapter, setActiveView, setCurrentType])
+
+  // 单条 block 执行器，返回导航目标
   const executeBlock = useCallback(async (
     block: ActionBlock,
     context: { projectId: string; lastCreatedChapterId: { current: string | null } }
-  ) => {
+  ): Promise<NavTarget | null> => {
     const { projectId, lastCreatedChapterId } = context
 
     if (block.type === 'create_chapter') {
@@ -92,24 +116,31 @@ export default function ChatPanel() {
       lastCreatedChapterId.current = newChapter.uid
       setCurrentChapter(newChapter.uid)
       setActiveView('editor')
+      return { kind: 'chapter', uid: newChapter.uid, title }
 
     } else if (block.type === 'write_chapter_draft') {
       const targetId = lastCreatedChapterId.current ?? useChaptersStore.getState().currentChapterId
       if (targetId) {
         const html = textToHtml(block.content.trim())
-        // 先用 streamingText 显示，保存后清除，让编辑器以新内容重新挂载
         setStreamingText(html)
         await updateChapterContent(targetId, 'draft', html)
-        // 小延迟确保 store 更新完成，再清除 overlay
         setTimeout(() => setStreamingText(null), 50)
         setActiveView('editor')
+        const title = useChaptersStore.getState().chapters.find(c => c.uid === targetId)?.title ?? '章节'
+        return { kind: 'chapter', uid: targetId, title }
       }
     } else {
       const truthFileType = ACTION_TRUTH_FILE_MAP[block.type as ActionType]
       if (truthFileType) {
         await updateTruthFile(projectId, truthFileType as TruthFileType, block.content.trim())
+        const TRUTH_LABELS: Record<TruthFileType, string> = {
+          worldview: '世界观账本', characters: '人物矩阵', resources: '资源账本',
+          hooks: '悬念钩子', summaries: '章节摘要', subplots: '支线追踪', emotional: '情感弧线',
+        }
+        return { kind: 'truth-file', fileType: truthFileType, label: TRUTH_LABELS[truthFileType] }
       }
     }
+    return null
   }, [createChapter, setCurrentChapter, updateChapterContent, updateTruthFile, setActiveView, setStreamingText])
 
   // 流式结束后，顺序执行最新消息里的所有 ACTION 块
@@ -144,8 +175,9 @@ export default function ChatPanel() {
         const key = `${msgId}-${idx}`
         setBlockStatuses((prev) => ({ ...prev, [key]: 'running' }))
         try {
-          await executeBlock(seg.block, { projectId: project.uid, lastCreatedChapterId })
+          const nav = await executeBlock(seg.block, { projectId: project.uid, lastCreatedChapterId })
           setBlockStatuses((prev) => ({ ...prev, [key]: 'done' }))
+          if (nav) setNavTargets((prev) => ({ ...prev, [key]: nav }))
         } catch {
           setBlockStatuses((prev) => ({ ...prev, [key]: 'error' }))
         }
@@ -272,7 +304,7 @@ export default function ChatPanel() {
                     const status: BlockStatus = msg.isStreaming
                       ? 'pending'
                       : (blockStatuses[key] ?? 'pending')
-                    return <ActionCard key={i} block={seg.block} status={status} />
+                    return <ActionCard key={i} block={seg.block} status={status} navTarget={navTargets[key]} onNavigate={handleNavigate} />
                   })}
                   {msg.isStreaming && (
                     <span className="inline-block w-0.5 h-4 bg-ctp-mauve animate-pulse ml-1 align-text-bottom" />
