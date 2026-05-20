@@ -45,7 +45,7 @@ export async function sendChatMessage(params: {
     .slice(-2)
 
   const recentContentText = recentDoneChapters.length > 0
-    ? recentDoneChapters.map((c, i) => {
+    ? recentDoneChapters.map((c) => {
         const raw = stripHtml(c.revised || c.draft || c.final || '')
         const preview = raw.slice(-1500) // 取末尾1500字，最接近当前进度
         return `${c.title}（末尾内容）：\n${preview}`
