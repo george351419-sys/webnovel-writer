@@ -1,6 +1,14 @@
 .tiptap-editor {
   height: 100%;
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: #45475a transparent;
 }
+
+.tiptap-editor::-webkit-scrollbar { width: 6px; }
+.tiptap-editor::-webkit-scrollbar-track { background: transparent; }
+.tiptap-editor::-webkit-scrollbar-thumb { background-color: #45475a; border-radius: 3px; }
+.tiptap-editor::-webkit-scrollbar-thumb:hover { background-color: #cba6f7; }
 
 .tiptap-editor .ProseMirror {
   min-height: 100%;

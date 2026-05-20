@@ -122,10 +122,20 @@ export default function ChatPanel() {
       const targetId = lastCreatedChapterId.current ?? useChaptersStore.getState().currentChapterId
       if (targetId) {
         const html = textToHtml(block.content.trim())
-        setStreamingText(html)
-        await updateChapterContent(targetId, 'draft', html)
-        setTimeout(() => setStreamingText(null), 50)
         setActiveView('editor')
+        // 逐字流式显示在中间编辑区，每帧 15 字，约 1-2s 完成 2000 字
+        await new Promise<void>((resolve) => {
+          let pos = 0
+          const tick = () => {
+            pos = Math.min(pos + 15, html.length)
+            setStreamingText(html.slice(0, pos))
+            if (pos < html.length) setTimeout(tick, 16)
+            else resolve()
+          }
+          tick()
+        })
+        await updateChapterContent(targetId, 'draft', html)
+        setTimeout(() => setStreamingText(null), 80)
         const title = useChaptersStore.getState().chapters.find(c => c.uid === targetId)?.title ?? '章节'
         return { kind: 'chapter', uid: targetId, title }
       }

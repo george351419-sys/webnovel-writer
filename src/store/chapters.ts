@@ -16,6 +16,8 @@ interface ChaptersState {
   updateChapterStatus: (uid: string, status: ChapterStatus) => Promise<void>
   updateAuditReport: (uid: string, report: AuditIssue[]) => Promise<void>
   updateWordCount: (uid: string, count: number) => Promise<void>
+  renameChapter: (uid: string, title: string) => Promise<void>
+  deleteChapter: (uid: string) => Promise<void>
 }
 
 export const useChaptersStore = create<ChaptersState>((set, get) => ({
@@ -80,5 +82,17 @@ export const useChaptersStore = create<ChaptersState>((set, get) => ({
     await db.chapters.where('uid').equals(uid).modify({ wordCount })
     const chapters = get().chapters.map((c) => (c.uid === uid ? { ...c, wordCount } : c))
     set({ chapters })
+  },
+
+  renameChapter: async (uid, title) => {
+    await db.chapters.where('uid').equals(uid).modify({ title, updatedAt: new Date() })
+    const chapters = get().chapters.map((c) => (c.uid === uid ? { ...c, title } : c))
+    set({ chapters })
+  },
+
+  deleteChapter: async (uid) => {
+    await db.chapters.where('uid').equals(uid).delete()
+    const chapters = get().chapters.filter((c) => c.uid !== uid)
+    set({ chapters, currentChapterId: get().currentChapterId === uid ? null : get().currentChapterId })
   },
 }))
