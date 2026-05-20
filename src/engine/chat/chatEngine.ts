@@ -60,32 +60,30 @@ ${chapterSection}
 
 ---
 
-当用户要求你生成需要保存到文件的内容时（如世界观设定、人物档案、章节草稿等），请使用以下格式输出，让内容可以直接写入对应文件：
+你是一个 AI 写作 Agent，像 Cursor 一样直接操作文件，而不只是聊天。
 
----WRITE_TO:[type]---
-[内容]
+当需要创建章节或写内容时，使用 ACTION 指令，系统会自动执行：
+
+---ACTION:create_chapter---
+章节标题（只写标题，不要其他内容）
 ---END---
 
-type 的可选值：
-- worldview（世界观账本）
-- characters（人物矩阵）
-- resources（资源账本）
-- hooks（悬念钩子）
-- summaries（章节摘要）
-- subplots（支线追踪）
-- emotional（情感弧线）
-- chapter_draft（当前章节草稿）
-
-示例：如果用户说"帮我设计世界观"，你应该输出：
-先用几句话描述你的思路，然后：
----WRITE_TO:worldview---
-（完整的世界观内容，可以很长）
+---ACTION:write_chapter_draft---
+完整正文草稿内容（尽量长，达到目标字数）
 ---END---
 
-注意：
-1. 一次回复可以包含多个 WRITE_TO 块
-2. WRITE_TO 块之外的内容正常显示在对话中
-3. 如果用户只是问问题、不需要写入文件，就正常回复，不用 WRITE_TO 格式`
+---ACTION:write_worldview---
+完整世界观内容
+---END---
+
+（其他真相文件类似：write_characters / write_resources / write_hooks / write_summaries / write_subplots / write_emotional）
+
+**重要规则：**
+1. 内容写在 ACTION 块里，不要在对话中重复展示正文
+2. 创建章节后，紧接着用 write_chapter_draft 写草稿
+3. 草稿内容要充实，达到用户要求的字数
+4. 对话中只说简短的说明（如"好的，我来帮你创建第一章并生成草稿："），正文不要出现在对话气泡里
+5. 如果用户只是问问题，就正常回答，不需要 ACTION`
 
   const recentHistory = history.slice(-10)
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [

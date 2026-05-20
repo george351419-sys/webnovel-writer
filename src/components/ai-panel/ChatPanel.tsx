@@ -1,70 +1,90 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Check, Download, FileText, SendHorizontal, Square } from 'lucide-react'
+import { Bot, Check, FileText, Loader2, SendHorizontal, Square } from 'lucide-react'
 import { useChatStore } from '@/store/chat'
 import { useChaptersStore } from '@/store/chapters'
 import { useProjectsStore } from '@/store/projects'
 import { useTruthFilesStore } from '@/store/truthFiles'
 import { useModelConfigStore } from '@/store/modelConfig'
+import { useUiStore } from '@/store/ui'
 import { sendChatMessage } from '@/engine/chat/chatEngine'
-import { parseMessage, WRITE_TARGET_LABELS } from '@/engine/chat/messageParser'
-import type { WriteBlock, WriteTarget } from '@/engine/chat/messageParser'
+import { parseMessage, ACTION_LABELS, ACTION_TRUTH_FILE_MAP } from '@/engine/chat/messageParser'
+import type { ActionBlock, ActionType } from '@/engine/chat/messageParser'
 import type { TruthFileType } from '@/types'
 
-interface WriteCardProps {
-  block: WriteBlock
-  onApply: (target: WriteTarget, content: string) => Promise<void>
+interface ActionCardProps {
+  block: ActionBlock
+  isStreaming: boolean
+  onExecute: (block: ActionBlock) => Promise<void>
 }
 
-function WriteCard({ block, onApply }: WriteCardProps) {
-  const [applied, setApplied] = useState(false)
-  const [applying, setApplying] = useState(false)
+function ActionCard({ block, isStreaming, onExecute }: ActionCardProps) {
+  const [status, setStatus] = useState<'pending' | 'running' | 'done' | 'error'>('pending')
+  const executed = useRef(false)
 
-  const handleApply = async () => {
-    setApplying(true)
-    await onApply(block.target, block.content)
-    setApplied(true)
-    setApplying(false)
-  }
+  useEffect(() => {
+    if (!isStreaming && status === 'pending' && !executed.current) {
+      executed.current = true
+      setStatus('running')
+      onExecute(block)
+        .then(() => setStatus('done'))
+        .catch(() => setStatus('error'))
+    }
+  }, [isStreaming])
+
+  const label = ACTION_LABELS[block.type]
+
+  const summary =
+    block.type === 'create_chapter'
+      ? `《${block.content.trim()}》`
+      : block.type === 'write_chapter_draft'
+        ? `${block.content.trim().length} 字`
+        : ''
 
   return (
-    <div className="mt-2 rounded-lg border border-ctp-surface1 bg-ctp-base overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-ctp-surface0 border-b border-ctp-surface1">
-        <div className="flex items-center gap-1.5">
-          <FileText className="w-3.5 h-3.5 text-ctp-mauve" />
-          <span className="text-xs font-medium text-ctp-mauve">{WRITE_TARGET_LABELS[block.target]}</span>
-        </div>
-        <button
-          onClick={handleApply}
-          disabled={applying || applied}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-            applied
-              ? 'bg-ctp-green/20 text-ctp-green cursor-default'
-              : 'bg-ctp-mauve text-ctp-base hover:opacity-90 disabled:opacity-50'
-          }`}
-        >
-          {applied ? (
-            <><Check className="w-3 h-3" /> 已写入</>
-          ) : applying ? (
-            '写入中...'
-          ) : (
-            <><Download className="w-3 h-3" /> 写入文件</>
-          )}
-        </button>
-      </div>
-      <pre className="px-3 py-2 text-xs text-ctp-subtext1 leading-relaxed whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-        {block.content}
-      </pre>
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+        status === 'done'
+          ? 'bg-ctp-green/10 border-ctp-green/30 text-ctp-green'
+          : status === 'error'
+            ? 'bg-ctp-red/10 border-ctp-red/30 text-ctp-red'
+            : status === 'running'
+              ? 'bg-ctp-blue/10 border-ctp-blue/30 text-ctp-blue'
+              : 'bg-ctp-surface0 border-ctp-surface1 text-ctp-subtext1'
+      }`}
+    >
+      {status === 'done' ? (
+        <Check className="w-3 h-3 flex-shrink-0" />
+      ) : status === 'running' ? (
+        <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin" />
+      ) : status === 'error' ? (
+        <span className="text-xs">✗</span>
+      ) : (
+        <FileText className="w-3 h-3 flex-shrink-0" />
+      )}
+      <span>
+        {label}
+        {summary ? ` ${summary}` : ''}
+      </span>
     </div>
   )
 }
 
 export default function ChatPanel() {
-  const { messages, isStreaming, addUserMessage, addAssistantMessage, appendChunk, finalizeMessage, setStreaming } =
-    useChatStore()
-  const { chapters, currentChapterId, updateChapterContent } = useChaptersStore()
+  const {
+    messages,
+    isStreaming,
+    addUserMessage,
+    addAssistantMessage,
+    appendChunk,
+    finalizeMessage,
+    setStreaming,
+  } = useChatStore()
+  const { chapters, currentChapterId, createChapter, setCurrentChapter, updateChapterContent } =
+    useChaptersStore()
   const { projects, currentProjectId } = useProjectsStore()
   const { truthFiles, updateTruthFile } = useTruthFilesStore()
   const isConfigured = useModelConfigStore((s) => s.isConfigured)
+  const setActiveView = useUiStore((s) => s.setActiveView)
 
   const chapter = chapters.find((c) => c.uid === currentChapterId) ?? null
   const project = projects.find((p) => p.uid === currentProjectId) ?? null
@@ -74,12 +94,13 @@ export default function ChatPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // Auto-scroll to bottom when messages change
+  // Track the last created chapter uid so write_chapter_draft can target it
+  const lastCreatedChapterIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value)
     const el = e.target
@@ -90,9 +111,47 @@ export default function ChatPanel() {
     el.style.height = `${Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)}px`
   }
 
+  const handleExecuteAction = useCallback(
+    async (block: ActionBlock) => {
+      if (!project) return
+
+      if (block.type === 'create_chapter') {
+        const title = block.content.trim() || '新章节'
+        const newChapter = await createChapter(project.uid, title)
+        lastCreatedChapterIdRef.current = newChapter.uid
+        setCurrentChapter(newChapter.uid)
+        setActiveView('editor')
+      } else if (block.type === 'write_chapter_draft') {
+        // Prefer the chapter just created in this response, fallback to current
+        const targetId =
+          lastCreatedChapterIdRef.current ?? useChaptersStore.getState().currentChapterId
+        if (targetId) {
+          await updateChapterContent(targetId, 'draft', block.content.trim())
+          setActiveView('editor')
+        }
+      } else {
+        const truthFileType = ACTION_TRUTH_FILE_MAP[block.type as ActionType]
+        if (truthFileType) {
+          await updateTruthFile(project.uid, truthFileType as TruthFileType, block.content.trim())
+        }
+      }
+    },
+    [
+      project,
+      createChapter,
+      setCurrentChapter,
+      updateChapterContent,
+      updateTruthFile,
+      setActiveView,
+    ],
+  )
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isStreaming || !project) return
+
+      // Reset the last-created chapter tracker for each new exchange
+      lastCreatedChapterIdRef.current = null
 
       addUserMessage(content.trim())
       setInput('')
@@ -139,7 +198,7 @@ export default function ChatPanel() {
       appendChunk,
       finalizeMessage,
       setStreaming,
-    ]
+    ],
   )
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -153,59 +212,53 @@ export default function ChatPanel() {
     abortRef.current?.abort()
   }
 
-  const handleApply = async (target: WriteTarget, content: string) => {
-    if (target === 'chapter_draft') {
-      if (chapter) {
-        await updateChapterContent(chapter.uid, 'draft', content)
-      }
-    } else {
-      if (project) {
-        await updateTruthFile(project.uid, target as TruthFileType, content)
-      }
-    }
-  }
-
-  // Quick-action chips
   const quickActions = chapter
     ? [
         {
-          label: '✦ 生成草稿',
-          message: `请帮我生成《${chapter.title}》的草稿，本章目标：${chapter.plan.goal}，目标字数：${chapter.plan.wordTarget}字`,
+          label: '⚡ 生成草稿',
+          message: `请帮我为《${chapter.title}》生成草稿，本章目标：${chapter.plan.goal || '未设置'}，目标字数约 ${chapter.plan.wordTarget} 字`,
         },
         {
           label: '🔍 审稿',
-          message: '请对当前章节草稿进行审稿，从故事性、人物塑造、节奏感等维度指出问题和改进建议',
+          message: `请审阅《${chapter.title}》的草稿，指出需要改进的地方`,
         },
         {
-          label: '✏️ 修订建议',
-          message: '请根据审稿结果，给出具体的修订建议',
-        },
-        {
-          label: '✓ 确认',
-          message: `《${chapter.title}》的内容已经确认，请帮我总结本章的关键信息点`,
+          label: '✏️ 修订',
+          message: `请根据之前的审稿意见，修订《${chapter.title}》的草稿`,
         },
       ]
-    : []
+    : [
+        {
+          label: '📖 创建第一章',
+          message: '请帮我创建小说的第一章，并生成一段草稿内容',
+        },
+        {
+          label: '🌍 设计世界观',
+          message: '请帮我设计这部小说的世界观背景',
+        },
+        {
+          label: '👥 创建人物',
+          message: '请帮我创建主要人物的档案',
+        },
+      ]
 
   return (
     <div className="flex flex-col h-full">
       {/* Quick action chips */}
-      {quickActions.length > 0 && (
-        <div className="flex-shrink-0 px-3 py-2 border-b border-ctp-surface0 overflow-x-auto">
-          <div className="flex gap-2 min-w-max">
-            {quickActions.map((action) => (
-              <button
-                key={action.label}
-                onClick={() => sendMessage(action.message)}
-                disabled={isStreaming || !isConfigured()}
-                className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2 hover:text-ctp-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
+      <div className="flex-shrink-0 px-3 py-2 border-b border-ctp-surface0 overflow-x-auto">
+        <div className="flex gap-2 min-w-max">
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              onClick={() => sendMessage(action.message)}
+              disabled={isStreaming || !isConfigured()}
+              className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2 hover:text-ctp-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -213,34 +266,48 @@ export default function ChatPanel() {
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
             <Bot className="w-8 h-8 text-ctp-surface2" />
             <p className="text-xs text-ctp-subtext0 leading-relaxed">
-              你好！我是你的网文写作助手，
+              你好！我是你的网文写作 Agent，
               <br />
-              有什么可以帮你的？
+              我会直接创建章节、写草稿，而不只是聊天。
             </p>
           </div>
         ) : (
           messages.map((msg) => {
-            const parsed = parseMessage(msg.content)
+            if (msg.role === 'user') {
+              return (
+                <div key={msg.id} className="flex justify-end">
+                  <div className="max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed break-words bg-ctp-mauve/20 text-ctp-text">
+                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                  </div>
+                </div>
+              )
+            }
+
+            // Assistant message — parse into segments
+            const segments = parseMessage(msg.content)
             return (
-              <div
-                key={msg.id}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[90%] px-3 py-2 rounded-lg text-xs leading-relaxed break-words ${
-                    msg.role === 'user'
-                      ? 'bg-ctp-mauve/20 text-ctp-text max-w-[85%]'
-                      : 'bg-ctp-surface0 text-ctp-text'
-                  }`}
-                >
-                  {parsed.segments.map((seg, i) =>
+              <div key={msg.id} className="flex justify-start">
+                <div className="max-w-[90%] space-y-1.5">
+                  {segments.map((seg, i) =>
                     seg.type === 'text' ? (
-                      <span key={i} className="whitespace-pre-wrap">{seg.content}</span>
+                      seg.content.trim() ? (
+                        <div
+                          key={i}
+                          className="bg-ctp-surface0 text-ctp-text px-3 py-2 rounded-lg text-xs leading-relaxed whitespace-pre-wrap break-words"
+                        >
+                          {seg.content}
+                        </div>
+                      ) : null
                     ) : (
-                      <WriteCard key={i} block={seg.block} onApply={handleApply} />
-                    )
+                      <ActionCard
+                        key={i}
+                        block={seg.block}
+                        isStreaming={msg.isStreaming ?? false}
+                        onExecute={handleExecuteAction}
+                      />
+                    ),
                   )}
-                  {msg.isStreaming && (
+                  {msg.isStreaming && segments.every((s) => s.type !== 'action') && (
                     <span className="inline-block w-0.5 h-4 bg-ctp-mauve animate-pulse ml-0.5 align-text-bottom" />
                   )}
                 </div>
@@ -264,7 +331,7 @@ export default function ChatPanel() {
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="问我任何写作问题..."
+            placeholder="让 Agent 帮你创建章节、写草稿..."
             disabled={isStreaming || !project}
             rows={2}
             className="flex-1 resize-none bg-ctp-surface0 border border-ctp-surface1 text-ctp-text rounded-md px-3 py-2 text-xs outline-none focus:border-ctp-mauve placeholder:text-ctp-subtext0 disabled:opacity-50 disabled:cursor-not-allowed leading-5"
