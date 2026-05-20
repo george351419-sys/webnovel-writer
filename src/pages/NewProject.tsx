@@ -1,8 +1,24 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, Zap } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { useProjectsStore } from '@/store/projects'
+import { useModelConfigStore } from '@/store/modelConfig'
 import type { Genre } from '@/types'
+
+interface Provider {
+  label: string
+  baseUrl: string
+  model: string
+}
+
+const PROVIDERS: Provider[] = [
+  { label: 'OpenAI',      baseUrl: 'https://api.openai.com/v1',                              model: 'gpt-4o' },
+  { label: 'DeepSeek',    baseUrl: 'https://api.deepseek.com/v1',                             model: 'deepseek-chat' },
+  { label: 'Kimi',        baseUrl: 'https://api.moonshot.cn/v1',                              model: 'moonshot-v1-8k' },
+  { label: '智谱 GLM',    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',                    model: 'glm-4-flash' },
+  { label: '通义千问',    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',       model: 'qwen-plus' },
+  { label: 'SiliconFlow', baseUrl: 'https://api.siliconflow.cn/v1',                           model: 'Qwen/Qwen2.5-72B-Instruct' },
+]
 
 const GENRES: { id: Genre; label: string; desc: string; color: string; bg: string }[] = [
   { id: 'xuanhuan', label: '玄幻/修仙', desc: '境界体系 · 功法修炼 · 升级流', color: 'border-ctp-mauve text-ctp-mauve', bg: 'bg-ctp-mauve/10' },
@@ -16,14 +32,34 @@ const GENRES: { id: Genre; label: string; desc: string; color: string; bg: strin
 export default function NewProject() {
   const navigate = useNavigate()
   const createProject = useProjectsStore((s) => s.createProject)
+  const { updateWriting, updateAudit, updateRevise } = useModelConfigStore()
 
   const [step, setStep] = useState(1)
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null)
   const [name, setName] = useState('')
   const [creating, setCreating] = useState(false)
 
-  const handleCreate = async () => {
+  // Step 3 model config state
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+
+  const handleSelectProvider = (provider: Provider) => {
+    setSelectedProvider(provider.label)
+    setBaseUrl(provider.baseUrl)
+    // Update writing/audit/revise model fields (keep temperature defaults)
+    updateWriting({ baseUrl: provider.baseUrl, model: provider.model })
+    updateAudit({ baseUrl: provider.baseUrl, model: provider.model })
+    updateRevise({ baseUrl: provider.baseUrl, model: provider.model })
+  }
+
+  const handleCreate = async (saveConfig = false) => {
     if (!selectedGenre || !name.trim()) return
+    if (saveConfig && apiKey.trim()) {
+      updateWriting({ baseUrl, apiKey: apiKey.trim() })
+      updateAudit({ baseUrl, apiKey: apiKey.trim() })
+      updateRevise({ baseUrl, apiKey: apiKey.trim() })
+    }
     setCreating(true)
     try {
       const project = await createProject(name.trim(), selectedGenre)
@@ -98,27 +134,49 @@ export default function NewProject() {
         {step === 3 && (
           <div className="max-w-sm">
             <h2 className="text-lg font-bold text-ctp-text mb-1">模型配置</h2>
-            <p className="text-sm text-ctp-subtext1 mb-6">需要配置 AI 模型 API Key 才能使用写作流水线</p>
-            <div className="bg-ctp-surface0 rounded-lg p-4 border border-ctp-surface1 mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Zap className="w-4 h-4 text-ctp-yellow" />
-                <span className="text-sm font-medium text-ctp-text">BYOK 模式</span>
-              </div>
-              <p className="text-xs text-ctp-subtext1 leading-relaxed">
-                你的 API Key 仅存储在本地浏览器，直接调用模型服务商接口，无需经过任何中间服务器。
-              </p>
+            <p className="text-sm text-ctp-subtext1 mb-4">选择服务商并填写 API Key，即可开启写作流水线</p>
+
+            {/* Provider pills */}
+            <div className="flex flex-wrap gap-2 mb-5">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => handleSelectProvider(p)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 ${
+                    selectedProvider === p.label
+                      ? 'bg-ctp-mauve text-ctp-base border-ctp-mauve'
+                      : 'bg-ctp-surface0 text-ctp-subtext1 border-ctp-surface1 hover:border-ctp-mauve hover:text-ctp-text'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
-            <div className="space-y-2">
-              <Link to="/settings" className="block w-full text-center px-4 py-2.5 bg-ctp-surface0 border border-ctp-surface1 text-ctp-text rounded-md text-sm hover:border-ctp-mauve transition-colors">
-                去配置模型
-              </Link>
-              <button
-                onClick={handleCreate}
-                disabled={creating}
-                className="w-full px-4 py-2.5 bg-ctp-mauve text-ctp-base rounded-md text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                {creating ? '创建中...' : '跳过，先创建项目'}
-              </button>
+
+            {/* Base URL */}
+            <div className="flex flex-col gap-1.5 mb-3">
+              <label className="text-xs font-medium text-ctp-subtext1">Base URL</label>
+              <input
+                type="text"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://api.openai.com/v1"
+                className="w-full bg-ctp-surface0 border border-ctp-surface1 text-ctp-text rounded-md px-3 py-2 text-sm outline-none focus:border-ctp-mauve transition-colors placeholder:text-ctp-subtext0"
+              />
+            </div>
+
+            {/* API Key */}
+            <div className="flex flex-col gap-1.5 mb-5">
+              <label className="text-xs font-medium text-ctp-subtext1">API Key</label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-..."
+                className="w-full bg-ctp-surface0 border border-ctp-surface1 text-ctp-text rounded-md px-3 py-2 text-sm outline-none focus:border-ctp-mauve transition-colors placeholder:text-ctp-subtext0"
+              />
+              <p className="text-xs text-ctp-subtext0">你的 Key 仅存储在本地浏览器</p>
             </div>
           </div>
         )}
@@ -142,14 +200,23 @@ export default function NewProject() {
             <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="flex items-center gap-2 px-5 py-2 bg-ctp-green text-ctp-base rounded-md text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            <Check className="w-4 h-4" />
-            {creating ? '创建中...' : '完成创建'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleCreate(false)}
+              disabled={creating}
+              className="px-4 py-2 text-sm text-ctp-subtext1 hover:text-ctp-text disabled:opacity-30 transition-colors"
+            >
+              跳过，先创建项目
+            </button>
+            <button
+              onClick={() => handleCreate(true)}
+              disabled={creating}
+              className="flex items-center gap-2 px-5 py-2 bg-ctp-green text-ctp-base rounded-md text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              <Check className="w-4 h-4" />
+              {creating ? '创建中...' : '完成创建'}
+            </button>
+          </div>
         )}
       </footer>
     </div>

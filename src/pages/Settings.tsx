@@ -7,24 +7,50 @@ import type { SingleModelConfig } from '@/store/modelConfig'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
+interface ProviderPreset {
+  label: string
+  baseUrl: string
+  model: string
+}
+
+const PROVIDER_PRESETS: ProviderPreset[] = [
+  { label: 'OpenAI',      baseUrl: 'https://api.openai.com/v1',                              model: 'gpt-4o' },
+  { label: 'DeepSeek',    baseUrl: 'https://api.deepseek.com/v1',                             model: 'deepseek-chat' },
+  { label: 'Kimi',        baseUrl: 'https://api.moonshot.cn/v1',                              model: 'moonshot-v1-8k' },
+  { label: '智谱 GLM',    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',                    model: 'glm-4-flash' },
+  { label: '通义千问',    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',       model: 'qwen-plus' },
+  { label: 'SiliconFlow', baseUrl: 'https://api.siliconflow.cn/v1',                           model: 'Qwen/Qwen2.5-72B-Instruct' },
+]
+
 interface ModelCardProps {
   title: string
   config: SingleModelConfig
   onUpdate: (cfg: Partial<SingleModelConfig>) => void
+  isFirst?: boolean
+  onSyncAll?: (cfg: SingleModelConfig) => void
 }
 
-function ModelCard({ title, config, onUpdate }: ModelCardProps) {
+function ModelCard({ title, config, onUpdate, isFirst, onSyncAll }: ModelCardProps) {
   const [showKey, setShowKey] = useState(false)
   const [local, setLocal] = useState<SingleModelConfig>({ ...config })
   const [testStatus, setTestStatus] = useState<TestStatus>('idle')
   const [testError, setTestError] = useState<string>('')
+  const [activePreset, setActivePreset] = useState<string | null>(null)
 
   function handleChange<K extends keyof SingleModelConfig>(key: K, value: SingleModelConfig[K]) {
     setLocal((prev) => ({ ...prev, [key]: value }))
   }
 
+  function handlePreset(preset: ProviderPreset) {
+    setActivePreset(preset.label)
+    setLocal((prev) => ({ ...prev, baseUrl: preset.baseUrl, model: preset.model }))
+  }
+
   function handleSave() {
     onUpdate(local)
+    if (isFirst && onSyncAll) {
+      onSyncAll(local)
+    }
   }
 
   async function handleTest() {
@@ -65,6 +91,24 @@ function ModelCard({ title, config, onUpdate }: ModelCardProps) {
   return (
     <div className="bg-ctp-surface0 rounded-xl p-5 flex flex-col gap-4">
       <h2 className="text-sm font-semibold text-ctp-mauve">{title}</h2>
+
+      {/* Provider presets */}
+      <div className="flex flex-wrap gap-1.5">
+        {PROVIDER_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => handlePreset(p)}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 ${
+              activePreset === p.label
+                ? 'bg-ctp-mauve text-ctp-base border-ctp-mauve'
+                : 'bg-ctp-base text-ctp-subtext1 border-ctp-surface1 hover:border-ctp-mauve hover:text-ctp-text'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       {/* Base URL */}
       <div className="flex flex-col gap-1.5">
@@ -160,6 +204,14 @@ function ModelCard({ title, config, onUpdate }: ModelCardProps) {
 export default function Settings() {
   const { writing, audit, revise, updateWriting, updateAudit, updateRevise } =
     useModelConfigStore()
+  const [syncToast, setSyncToast] = useState(false)
+
+  function handleSyncAll(cfg: SingleModelConfig) {
+    updateAudit({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, temperature: 0.3 })
+    updateRevise({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, temperature: 0.5 })
+    setSyncToast(true)
+    setTimeout(() => setSyncToast(false), 3000)
+  }
 
   return (
     <div className="h-full bg-ctp-base text-ctp-text flex flex-col">
@@ -175,10 +227,17 @@ export default function Settings() {
 
       <main className="flex-1 overflow-y-auto py-8">
         <div className="max-w-2xl mx-auto px-6 flex flex-col gap-6">
+          {syncToast && (
+            <div className="px-4 py-2.5 rounded-lg bg-ctp-green/10 border border-ctp-green/30 text-xs text-ctp-green">
+              已同步 API 配置到审稿/修订模型（温度独立保留）
+            </div>
+          )}
           <ModelCard
             title="写作模型"
             config={writing}
             onUpdate={updateWriting}
+            isFirst={true}
+            onSyncAll={handleSyncAll}
           />
           <ModelCard
             title="审稿模型"

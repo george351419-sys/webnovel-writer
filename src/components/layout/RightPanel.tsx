@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bot, ChevronRight, ExternalLink, RotateCcw, Square } from 'lucide-react'
+import { AlertCircle, Bot, ChevronRight, RotateCcw, Settings, Square } from 'lucide-react'
 import { useChaptersStore } from '@/store/chapters'
 import { useProjectsStore } from '@/store/projects'
 import { useTruthFilesStore } from '@/store/truthFiles'
@@ -201,6 +201,11 @@ export default function RightPanel() {
 
       {/* 当前步骤内容 */}
       <div className="flex-1 overflow-y-auto p-4">
+        {!isConfigured() && (
+          <div className="mb-3 px-3 py-2 rounded bg-ctp-yellow/10 border border-ctp-yellow/30 text-xs text-ctp-yellow">
+            ⚡ 当前无 AI 配置，流水线功能不可用
+          </div>
+        )}
         {error && (
           <div className="mb-3 px-3 py-2 rounded bg-ctp-red/10 border border-ctp-red/30 text-xs text-ctp-red">
             {error}
@@ -291,13 +296,22 @@ export default function RightPanel() {
       {chapter.status !== 'confirmed' && (
         <div className="p-4 border-t border-ctp-surface0 flex-shrink-0">
           {!isConfigured() ? (
-            <Link
-              to="/settings"
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-ctp-blue hover:text-ctp-blue/80 transition-colors"
-            >
-              去设置 API Key
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-ctp-red/10 border border-ctp-red/30">
+                <AlertCircle className="w-4 h-4 text-ctp-red flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-ctp-red">未配置 AI 模型</p>
+                  <p className="text-xs text-ctp-subtext1 mt-0.5">需要先填写 API Key 才能使用写作流水线</p>
+                </div>
+              </div>
+              <Link
+                to="/settings"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-ctp-mauve text-ctp-base rounded-md text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                去设置
+              </Link>
+            </div>
           ) : loading ? (
             <button
               onClick={handleStop}
