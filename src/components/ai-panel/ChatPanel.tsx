@@ -282,6 +282,9 @@ export default function ChatPanel() {
             const targetId = capturedId ?? useChaptersStore.getState().currentChapterId
             if (targetId) {
               await updateChapterContent(targetId, 'draft', draftHtml)
+              // 更新字数（AI写入后 wordCount 不会自动更新）
+              const plainLen = content.replace(/\s/g, '').length
+              useChaptersStore.getState().updateWordCount(targetId, plainLen)
               setTimeout(() => setStreamingText(null), 80)
             }
           })()

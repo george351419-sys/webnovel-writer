@@ -139,9 +139,9 @@ export default function EditorArea() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col relative">
+      <div className="flex-1 min-h-0 relative" style={{ overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#45475a transparent' }}>
         {streamingText !== null ? (
-          <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="px-8 py-6">
             <div className="max-w-2xl mx-auto">
               <p className="text-xs text-ctp-blue mb-4 flex items-center gap-1.5">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-ctp-blue animate-pulse" />

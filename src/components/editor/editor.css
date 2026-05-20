@@ -1,15 +1,6 @@
 .tiptap-editor {
-  flex: 1;
-  min-height: 0;        /* flex 子元素必须设置，否则内容撑开容器而不滚动 */
-  overflow-y: scroll;
-  scrollbar-width: thin;
-  scrollbar-color: #45475a transparent;
+  min-height: 100%;
 }
-
-.tiptap-editor::-webkit-scrollbar { width: 6px; }
-.tiptap-editor::-webkit-scrollbar-track { background: transparent; }
-.tiptap-editor::-webkit-scrollbar-thumb { background-color: #45475a; border-radius: 3px; }
-.tiptap-editor::-webkit-scrollbar-thumb:hover { background-color: #cba6f7; }
 
 .tiptap-editor .ProseMirror {
   min-height: 100%;

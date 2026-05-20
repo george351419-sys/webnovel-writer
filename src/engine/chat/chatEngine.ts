@@ -40,8 +40,9 @@ export async function sendChatMessage(params: {
     : '（暂无章节）'
 
   // 最近已完成的章节内容（供续写参考，最多取最近2章）
+  // 有任意内容的章节（wordCount 只在手动编辑时更新，不能用来判断 AI 是否写过）
   const recentDoneChapters = sortedChapters
-    .filter((c) => c.status === 'confirmed' || c.wordCount > 100)
+    .filter((c) => (c.draft || c.revised || c.final).trim().length > 50)
     .slice(-2)
 
   const recentContentText = recentDoneChapters.length > 0
