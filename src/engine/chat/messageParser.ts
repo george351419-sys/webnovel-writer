@@ -60,9 +60,8 @@ export function parseMessage(raw: string): MessageSegment[] {
     }
     if (VALID.has(rawType)) {
       segments.push({ type: 'action', block: { type: rawType as ActionType, content: content.trim() } })
-    } else {
-      segments.push({ type: 'text', content: fullMatch })
     }
+    // 未知 ACTION 类型静默丢弃，不显示原始标记
     lastIndex = match.index + fullMatch.length
   }
   if (lastIndex < raw.length) {

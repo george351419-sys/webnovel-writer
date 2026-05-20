@@ -324,6 +324,18 @@ export default function ChatPanel() {
             )
           })
         )}
+        {isStreaming && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ctp-surface0 text-ctp-subtext1 text-xs">
+              <span className="flex gap-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ctp-mauve animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-ctp-mauve animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-ctp-mauve animate-bounce [animation-delay:300ms]" />
+              </span>
+              AI 正在思考...
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
