@@ -28,6 +28,7 @@ export default function ChapterList({ projectId, expanded, onToggle }: Props) {
   const [ctx, setCtx] = useState<CtxState | null>(null)
   const [renamingUid, setRenamingUid] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [creating, setCreating] = useState(false)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
   const handleSelect = (uid: string) => {
@@ -36,9 +37,15 @@ export default function ChapterList({ projectId, expanded, onToggle }: Props) {
   }
 
   const handleAddChapter = async () => {
-    const n = chapters.length + 1
-    const chapter = await createChapter(projectId, `第${n}章`)
-    handleSelect(chapter.uid)
+    if (creating) return
+    setCreating(true)
+    try {
+      const n = chapters.length + 1
+      const chapter = await createChapter(projectId, `第${n}章`)
+      handleSelect(chapter.uid)
+    } finally {
+      setCreating(false)
+    }
   }
 
   const handleContextMenu = (e: React.MouseEvent, uid: string) => {
@@ -118,10 +125,11 @@ export default function ChapterList({ projectId, expanded, onToggle }: Props) {
 
           <button
             onClick={handleAddChapter}
-            className="w-full text-left px-3 py-1 text-xs text-ctp-overlay0 hover:text-ctp-mauve hover:bg-ctp-surface0 rounded transition-colors pl-7 flex items-center gap-1"
+            disabled={creating}
+            className="w-full text-left px-3 py-1 text-xs text-ctp-overlay0 hover:text-ctp-mauve hover:bg-ctp-surface0 rounded transition-colors pl-7 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-3 h-3" />
-            <span>新建章节</span>
+            <span>{creating ? '创建中...' : '新建章节'}</span>
           </button>
         </div>
       )}

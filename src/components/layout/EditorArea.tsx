@@ -97,7 +97,7 @@ export default function EditorArea() {
   }
 
   return (
-    <main className="flex-1 flex flex-col bg-ctp-base overflow-hidden">
+    <main className="h-full flex flex-col bg-ctp-base overflow-hidden">
       <div className="px-6 py-3 border-b border-ctp-surface0 flex items-center justify-between flex-shrink-0">
         <h2 className="text-sm font-medium text-ctp-text truncate">{chapter.title}</h2>
         <div className="flex items-center gap-3">
